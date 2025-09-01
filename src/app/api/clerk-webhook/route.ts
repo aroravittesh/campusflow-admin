@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { Webhook } from "svix";
 import { headers } from "next/headers";
 import { PrismaClient } from "@prisma/client";

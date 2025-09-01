@@ -1,46 +1,60 @@
-/* eslint-disable */
 import { Webhook } from "svix";
 import { headers } from "next/headers";
 import { PrismaClient } from "@prisma/client";
 
+// Direct Prisma client (⚠️ watch for connection limits in serverless)
 const prisma = new PrismaClient();
 
+// Define Clerk event type (simplified for user.created)
+interface ClerkUserCreatedEvent {
+  type: "user.created";
+  data: {
+    id: string;
+    email_addresses: { email_address: string }[];
+  };
+}
+
 export async function POST(req: Request) {
-  // Get JSON payload
   const payload = await req.json();
 
-  // Next.js headers() – no await
-  const headersList = headers();
+  // ✅ headers() is synchronous
+  const rawHeaders = headers();
+  const headerPayload: Record<string, string> = {};
+  (await rawHeaders).forEach((value, key) => {
+    headerPayload[key] = value;
+  });
 
-  // Grab Clerk headers safely
-  const svix_id = headersList.get("svix-id") || "";
-  const svix_timestamp = headersList.get("svix-timestamp") || "";
-  const svix_signature = headersList.get("svix-signature") || "";
+  const wh = new Webhook(process.env.CLERK_WEBHOOK_SECRET || "");
+  let evt: ClerkUserCreatedEvent;
 
-  // Verify webhook with Svix
-  const wh = new Webhook(process.env.CLERK_WEBHOOK_SECRET!);
-
-  let evt;
   try {
-    evt = wh.verify(JSON.stringify(payload), {
-      "svix-id": svix_id,
-      "svix-timestamp": svix_timestamp,
-      "svix-signature": svix_signature,
-    });
+    evt = wh.verify(JSON.stringify(payload), headerPayload) as ClerkUserCreatedEvent;
   } catch (err) {
-    console.error("Webhook signature verification failed:", err);
+    console.error("❌ Webhook verification failed:", err);
     return new Response("Invalid signature", { status: 400 });
   }
 
-  // Handle Clerk events
   if (evt.type === "user.created") {
-    const { id, email_addresses } = evt.data as any;
+    const { id, email_addresses } = evt.data;
     const email = email_addresses?.[0]?.email_address;
 
-    if (email) {
+    if (!email) {
+      console.error("❌ No email found in Clerk event");
+      return new Response("Missing email", { status: 400 });
+    }
+
+    try {
       await prisma.admin.create({
-        data: { clerkId: id, email },
+        data: {
+          clerkId: id,
+          email,
+          // role will default to "admin" from schema
+        },
       });
+      console.log("✅ Admin inserted into DB:", { id, email });
+    } catch (e) {
+      console.error("❌ Prisma insert into Admin failed:", e);
+      return new Response("Database error", { status: 500 });
     }
   }
 

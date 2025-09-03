@@ -1,0 +1,16 @@
+-- CreateTable
+CREATE TABLE "public"."Admin" (
+    "id" TEXT NOT NULL,
+    "clerkId" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'admin',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Admin_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Admin_clerkId_key" ON "public"."Admin"("clerkId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Admin_email_key" ON "public"."Admin"("email");
